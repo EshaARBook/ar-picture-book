@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>AR Picture Book ✨</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; font-family: 'Georgia', serif; }
+
+    /* Loading screen */
+    #loading-screen {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, #1a2a1a 0%, #2d4a2d 50%, #1a2a1a 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      gap: 24px;
+    }
+    #loading-screen h1 {
+      color: #c8e6c0;
+      font-size: 1.6rem;
+      letter-spacing: 2px;
+      text-align: center;
+      padding: 0 20px;
+    }
+    #loading-screen p {
+      color: #8fbc8f;
+      font-size: 0.95rem;
+      text-align: center;
+      padding: 0 30px;
+      line-height: 1.6;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid rgba(200, 230, 192, 0.2);
+      border-top-color: #c8e6c0;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Start screen (tap to begin) */
+    #start-screen {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, #1a2a1a 0%, #2d4a2d 50%, #1a2a1a 100%);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9998;
+      gap: 20px;
+      cursor: pointer;
+    }
+    #start-screen h1 {
+      color: #c8e6c0;
+      font-size: 1.8rem;
+      text-align: center;
+      padding: 0 20px;
+    }
+    #start-screen p {
+      color: #8fbc8f;
+      font-size: 1rem;
+      text-align: center;
+      padding: 0 30px;
+      line-height: 1.7;
+    }
+    .tap-btn {
+      background: rgba(200, 230, 192, 0.15);
+      border: 2px solid #c8e6c0;
+      color: #c8e6c0;
+      padding: 14px 36px;
+      border-radius: 50px;
+      font-size: 1.1rem;
+      font-family: 'Georgia', serif;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: all 0.3s;
+    }
+    .tap-btn:hover, .tap-btn:active {
+      background: rgba(200, 230, 192, 0.3);
+    }
+    .leaf-icon { font-size: 3rem; }
+
+    /* Scanning hint overlay */
+    #scan-hint {
+      position: fixed;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.65);
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 50px;
+      font-size: 0.9rem;
+      text-align: center;
+      z-index: 500;
+      display: none;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    /* Scanning frame animation */
+    #scan-frame {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 400;
+      pointer-events: none;
+    }
+    .corner {
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      border-color: rgba(200, 230, 192, 0.8);
+      border-style: solid;
+    }
+    .corner-tl { top: 20%; left: 10%; border-width: 3px 0 0 3px; }
+    .corner-tr { top: 20%; right: 10%; border-width: 3px 3px 0 0; }
+    .corner-bl { bottom: 20%; left: 10%; border-width: 0 0 3px 3px; }
+    .corner-br { bottom: 20%; right: 10%; border-width: 0 3px 3px 0; }
+
+    /* A-Frame canvas fills screen */
+    a-scene {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+
+  <!-- A-Frame first, then MindAR -->
+  <script src="https://aframe.io/releases/1.4.2/aframe.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+  <!-- Loading screen -->
+  <div id="loading-screen">
+    <div class="leaf-icon">🌿</div>
+    <h1>Loading Magic...</h1>
+    <div class="spinner"></div>
+    <p>Preparing your AR experience.<br>This takes a few seconds ✨</p>
+  </div>
+
+  <!-- Start screen -->
+  <div id="start-screen">
+    <div class="leaf-icon">📖</div>
+    <h1>AR Picture Book</h1>
+    <p>Point your camera at the<br>illustration page to see<br>the magic come alive 🌿</p>
+    <button class="tap-btn" id="start-btn">✨ Begin Experience</button>
+  </div>
+
+  <!-- Scan hint -->
+  <div id="scan-hint">📖 Point camera at the book page</div>
+
+  <!-- Scan frame corners -->
+  <div id="scan-frame">
+    <div class="corner corner-tl"></div>
+    <div class="corner corner-tr"></div>
+    <div class="corner corner-bl"></div>
+    <div class="corner corner-br"></div>
+  </div>
+
+  <!-- A-Frame AR Scene -->
+  <a-scene
+    id="ar-scene"
+    mindar-image="imageTargetSrc: targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no;"
+    color-space="sRGB"
+    renderer="colorManagement: true, physicallyCorrectLights"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false"
+  >
+    <a-assets>
+      <video
+        id="ar-video"
+        src="animation.mp4"
+        preload="auto"
+        playsinline
+        webkit-playsinline
+        loop
+        crossorigin="anonymous"
+      ></video>
+      <audio id="ambient-audio" src="ambient.mp3" preload="auto" loop></audio>
+    </a-assets>
+
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <a-entity mindar-image-target="targetIndex: 0">
+      <!-- Video overlay — covers the whole illustration -->
+      <a-video
+        src="#ar-video"
+        position="0 0 0.001"
+        width="1.6"
+        height="1.28"
+        rotation="0 0 0"
+      ></a-video>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    const loadingScreen = document.getElementById('loading-screen');
+    const startScreen   = document.getElementById('start-screen');
+    const startBtn      = document.getElementById('start-btn');
+    const scanHint      = document.getElementById('scan-hint');
+    const scanFrame     = document.getElementById('scan-frame');
+    const arScene       = document.getElementById('ar-scene');
+    const arVideo       = document.getElementById('ar-video');
+    const ambientAudio  = document.getElementById('ambient-audio');
+
+    // Show start screen once ready
+    function showStartScreen() {
+      loadingScreen.style.display = 'none';
+      startScreen.style.display   = 'flex';
+    }
+
+    arScene.addEventListener('loaded', showStartScreen);
+    // Fallback: show start screen after 5s even if loaded event misfires
+    setTimeout(() => {
+      if (loadingScreen.style.display !== 'none') showStartScreen();
+    }, 5000);
+
+    // User taps Begin
+    startBtn.addEventListener('click', () => {
+      startScreen.style.display = 'none';
+      scanHint.style.display    = 'block';
+      scanFrame.style.display   = 'flex';
+
+      try {
+        const arSystem = arScene.systems['mindar-image-system'];
+        arSystem.start();
+      } catch(e) {
+        console.error('AR start error:', e);
+      }
+    });
+
+    // Target found — play video + audio
+    arScene.addEventListener('targetFound', () => {
+      scanHint.style.display  = 'none';
+      scanFrame.style.display = 'none';
+
+      arVideo.play().catch(() => {});
+      ambientAudio.play().catch(() => {});
+    });
+
+    // Target lost — pause
+    arScene.addEventListener('targetLost', () => {
+      scanHint.style.display  = 'block';
+      scanFrame.style.display = 'flex';
+
+      arVideo.pause();
+      ambientAudio.pause();
+    });
+  </script>
+</body>
+</html>
