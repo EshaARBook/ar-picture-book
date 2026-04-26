@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>AR Picture Book ✨</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; font-family: 'Georgia', serif; }
+
+    #loading-screen {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, #1a2a1a 0%, #2d4a2d 50%, #1a2a1a 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      gap: 24px;
+    }
+    #loading-screen h1 {
+      color: #c8e6c0;
+      font-size: 1.6rem;
+      letter-spacing: 2px;
+      text-align: center;
+      padding: 0 20px;
+    }
+    #loading-screen p {
+      color: #8fbc8f;
+      font-size: 0.95rem;
+      text-align: center;
+      padding: 0 30px;
+      line-height: 1.6;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid rgba(200, 230, 192, 0.2);
+      border-top-color: #c8e6c0;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Splash screen */
+    #start-screen {
+      position: fixed;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      z-index: 9998;
+      padding-bottom: 10vh;
+    }
+    #splash-bg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+    }
+    #start-btn {
+      position: relative;
+      z-index: 1;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      width: min(70vw, 300px);
+      transition: transform 0.15s ease, opacity 0.15s ease;
+    }
+    #start-btn img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    #start-btn:active {
+      transform: scale(0.96);
+      opacity: 0.85;
+    }
+
+    #scan-hint {
+      position: fixed;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.65);
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 50px;
+      font-size: 0.9rem;
+      text-align: center;
+      z-index: 500;
+      display: none;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    #scan-frame {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 400;
+      pointer-events: none;
+    }
+    .corner {
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      border-color: rgba(200, 230, 192, 0.8);
+      border-style: solid;
+    }
+    .corner-tl { top: 20%; left: 10%; border-width: 3px 0 0 3px; }
+    .corner-tr { top: 20%; right: 10%; border-width: 3px 3px 0 0; }
+    .corner-bl { bottom: 20%; left: 10%; border-width: 0 0 3px 3px; }
+    .corner-br { bottom: 20%; right: 10%; border-width: 0 3px 3px 0; }
+
+    /* Sound button */
+    #sound-btn {
+      display: none;
+      position: fixed;
+      bottom: 28px;
+      right: 20px;
+      z-index: 600;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      width: 64px;
+      height: 64px;
+      transition: transform 0.15s ease, opacity 0.15s ease;
+    }
+    #sound-btn img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    #sound-btn:active {
+      transform: scale(0.9);
+      opacity: 0.8;
+    }
+
+    a-scene {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/aframe@1.4.2/dist/aframe-master.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+</head>
+<body>
+
+  <!-- Loading screen -->
+  <div id="loading-screen">
+    <div style="font-size:3rem">🌿</div>
+    <h1>Loading Magic...</h1>
+    <div class="spinner"></div>
+    <p>Preparing your AR experience.<br>This takes a few seconds ✨</p>
+  </div>
+
+  <!-- Splash screen -->
+  <div id="start-screen">
+    <img id="splash-bg" src="splashscreen.png" alt="Splash screen" />
+    <button id="start-btn" aria-label="Let's Begin">
+      <img src="let_s-begin.png" alt="Let's Begin" />
+    </button>
+  </div>
+
+  <!-- Scan hint -->
+  <div id="scan-hint">📖 Point camera at the book page</div>
+
+  <!-- Sound toggle -->
+  <button id="sound-btn" aria-label="Toggle sound">
+    <img id="sound-icon" src="sound-off.png" alt="Sound off" />
+  </button>
+
+  <!-- Scan frame corners -->
+  <div id="scan-frame">
+    <div class="corner corner-tl"></div>
+    <div class="corner corner-tr"></div>
+    <div class="corner corner-bl"></div>
+    <div class="corner corner-br"></div>
+  </div>
+
+  <!-- AR Scene -->
+  <a-scene
+    id="ar-scene"
+    mindar-image="imageTargetSrc: targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; filterMinCF: 0.05; filterBeta: 50; warmupTolerance: 5; missTolerance: 10;"
+    color-space="sRGB"
+    renderer="colorManagement: true, physicallyCorrectLights"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false"
+  >
+    <a-assets>
+      <video
+        id="ar-video"
+        src="animation.mp4"
+        preload="auto"
+        playsinline
+        webkit-playsinline
+        loop
+        crossorigin="anonymous"
+      ></video>
+      <audio id="ambient-audio" src="ambient.mp3" preload="auto" loop></audio>
+    </a-assets>
+
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <a-entity mindar-image-target="targetIndex: 0">
+      <a-video
+        src="#ar-video"
+        position="0 0 0.001"
+        width="1"
+        height="0.8"
+        rotation="0 0 0"
+      ></a-video>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    const loadingScreen = document.getElementById('loading-screen');
+    const startScreen   = document.getElementById('start-screen');
+    const startBtn      = document.getElementById('start-btn');
+    const scanHint      = document.getElementById('scan-hint');
+    const scanFrame     = document.getElementById('scan-frame');
+    const arScene       = document.getElementById('ar-scene');
+    const arVideo       = document.getElementById('ar-video');
+    const ambientAudio  = document.getElementById('ambient-audio');
+    const soundBtn      = document.getElementById('sound-btn');
+    const soundIcon     = document.getElementById('sound-icon');
+
+    function showStartScreen() {
+      loadingScreen.style.display = 'none';
+      startScreen.style.display   = 'flex';
+    }
+
+    arScene.addEventListener('loaded', showStartScreen);
+    setTimeout(() => {
+      if (loadingScreen.style.display !== 'none') showStartScreen();
+    }, 5000);
+
+    startBtn.addEventListener('click', () => {
+      startScreen.style.display = 'none';
+      scanHint.style.display    = 'block';
+      scanFrame.style.display   = 'flex';
+      try {
+        arScene.systems['mindar-image-system'].start();
+      } catch(e) {
+        console.error('AR start error:', e);
+      }
+    });
+
+    let soundEnabled = false;
+
+    soundBtn.addEventListener('click', () => {
+      soundEnabled = !soundEnabled;
+      if (soundEnabled) {
+        ambientAudio.play().catch(() => {});
+        soundIcon.src = 'sound-on.png';
+        soundIcon.alt = 'Sound on';
+      } else {
+        ambientAudio.pause();
+        soundIcon.src = 'sound-off.png';
+        soundIcon.alt = 'Sound off';
+      }
+    });
+
+    arScene.addEventListener('targetFound', () => {
+      scanHint.style.display  = 'none';
+      scanFrame.style.display = 'none';
+      soundBtn.style.display  = 'block';
+      arVideo.play().catch(() => {});
+      if (soundEnabled) ambientAudio.play().catch(() => {});
+    });
+
+    arScene.addEventListener('targetLost', () => {
+      scanHint.style.display  = 'block';
+      scanFrame.style.display = 'flex';
+      arVideo.pause();
+      ambientAudio.pause();
+    });
+  </script>
+</body>
+</html>
