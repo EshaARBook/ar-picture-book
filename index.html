@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>AR Picture Book</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; overflow: hidden; font-family: 'Georgia', serif; }
+
+    #splash-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding-top: 8vh;
+      background-image: url('splashscreen.png');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+
+    #loading-indicator {
+      position: absolute;
+      bottom: 10vh;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 4px solid rgba(45, 90, 45, 0.25);
+      border-top-color: #2d5a2d;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Guide button — above Let's Begin */
+    #guide-btn {
+      position: relative;
+      z-index: 1;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      width: min(70vw, 300px);
+      margin-bottom: 16px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.6s ease;
+    }
+    #guide-btn.ready {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #guide-btn img { width: 100%; height: auto; display: block; }
+    #guide-btn:active { transform: scale(0.96); opacity: 0.85; }
+
+    /* Let's Begin button */
+    #start-btn {
+      position: relative;
+      z-index: 1;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      width: min(70vw, 300px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.6s ease;
+    }
+    #start-btn.ready {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #start-btn img { width: 100%; height: auto; display: block; }
+    #start-btn:active { transform: scale(0.96); opacity: 0.85; }
+
+    /* Caregiver guide overlay */
+    #guide-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      background: rgba(0,0,0,0.85);
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    #guide-overlay.visible { display: flex; }
+    #guide-box {
+      background: #1a2e1a;
+      border: 1px solid rgba(150,200,150,0.3);
+      border-radius: 16px;
+      padding: 28px 24px;
+      max-width: 480px;
+      width: 100%;
+      color: #d4e8d4;
+      font-family: 'Georgia', serif;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    #guide-box h2 {
+      font-size: 1.2rem;
+      font-weight: normal;
+      color: #a8d8a8;
+      margin-bottom: 16px;
+      text-align: center;
+      letter-spacing: 0.05em;
+    }
+    #guide-box p {
+      font-size: 0.88rem;
+      line-height: 1.8;
+      margin-bottom: 12px;
+      color: #c8e0c8;
+    }
+    #guide-box .step {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 0.86rem;
+      line-height: 1.7;
+    }
+    #guide-box .step-num {
+      color: #a8d8a8;
+      flex-shrink: 0;
+      font-size: 0.9rem;
+    }
+    #guide-close {
+      display: block;
+      margin: 20px auto 0;
+      background: none;
+      border: 1px solid rgba(150,200,150,0.4);
+      color: #a8d8a8;
+      padding: 10px 32px;
+      border-radius: 24px;
+      cursor: pointer;
+      font-family: 'Georgia', serif;
+      font-size: 0.88rem;
+      transition: background 0.2s;
+    }
+    #guide-close:hover { background: rgba(150,200,150,0.1); }
+
+    /* Scan hint */
+    #scan-hint {
+      position: fixed;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 500;
+      display: none;
+      pointer-events: none;
+      width: min(72vw, 340px);
+    }
+    #scan-hint img { width: 100%; height: auto; display: block; }
+
+    /* Scan frame */
+    #scan-frame {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 400;
+      pointer-events: none;
+    }
+    .corner {
+      position: absolute;
+      width: 50px;
+      height: 50px;
+      border-color: rgba(200, 230, 192, 0.8);
+      border-style: solid;
+    }
+    .corner-tl { top: 20%; left: 10%; border-width: 3px 0 0 3px; }
+    .corner-tr { top: 20%; right: 10%; border-width: 3px 3px 0 0; }
+    .corner-bl { bottom: 20%; left: 10%; border-width: 0 0 3px 3px; }
+    .corner-br { bottom: 20%; right: 10%; border-width: 0 3px 3px 0; }
+
+    /* Sound button */
+    #sound-btn {
+      display: none;
+      position: fixed;
+      bottom: 28px;
+      right: 20px;
+      z-index: 600;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      width: 64px;
+      height: 64px;
+      transition: transform 0.15s ease, opacity 0.15s ease;
+    }
+    #sound-btn img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    #sound-btn:active { transform: scale(0.9); opacity: 0.8; }
+
+    /* Flute button */
+    #flute-btn {
+      display: none;
+      position: fixed;
+      bottom: 28px;
+      right: 96px;
+      z-index: 600;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      width: 64px;
+      height: 64px;
+      transition: transform 0.15s ease, opacity 0.15s ease;
+    }
+    #flute-btn img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    #flute-btn:active { transform: scale(0.9); opacity: 0.8; }
+
+    /* Flute overlay */
+    #flute-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 8000;
+      background: rgba(0,0,0,0.88);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    #flute-overlay.visible { display: flex; }
+
+    #flute-title {
+      font-family: 'Georgia', serif;
+      font-size: 0.85rem;
+      font-style: italic;
+      color: rgba(200,230,200,0.6);
+      letter-spacing: 0.15em;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    #flute-emotion {
+      font-family: 'Georgia', serif;
+      font-size: 1.3rem;
+      font-weight: normal;
+      color: #c8e8c8;
+      letter-spacing: 0.1em;
+      margin-bottom: 6px;
+      text-align: center;
+    }
+    #flute-instruction {
+      font-family: 'Georgia', serif;
+      font-size: 0.78rem;
+      font-style: italic;
+      color: rgba(180,220,180,0.5);
+      margin-bottom: 36px;
+      text-align: center;
+    }
+
+    #flute-body {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 22px;
+      background: linear-gradient(160deg, #2a3a1a, #1a2810);
+      border: 1px solid rgba(150,190,100,0.25);
+      border-radius: 40px;
+      padding: 32px 40px;
+      width: min(220px, 60vw);
+    }
+
+    .flute-hole {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #0a0f06, #050805);
+      border: 2px solid rgba(120,160,80,0.3);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .flute-hole .note-label {
+      font-family: 'Georgia', serif;
+      font-size: 0.7rem;
+      color: rgba(150,190,100,0.4);
+      pointer-events: none;
+      font-style: italic;
+    }
+    .flute-hole.glowing {
+      background: radial-gradient(circle at 40% 40%, #8fbc5a, #4a7a20);
+      border-color: #a8d870;
+      box-shadow: 0 0 18px rgba(160,220,80,0.7), 0 0 36px rgba(120,180,60,0.4), inset 0 0 12px rgba(200,255,100,0.3);
+      animation: pulseHole 0.8s ease infinite;
+    }
+    .flute-hole.played {
+      background: radial-gradient(circle at 40% 40%, #3a5a20, #1a3010);
+      border-color: rgba(120,160,80,0.5);
+      box-shadow: 0 0 8px rgba(120,160,80,0.2);
+    }
+    .flute-hole.wrong {
+      background: radial-gradient(circle at 40% 40%, #8b2020, #3a0a0a);
+      border-color: #cc4444;
+      box-shadow: 0 0 14px rgba(200,60,60,0.5);
+    }
+    @keyframes pulseHole {
+      0%, 100% { box-shadow: 0 0 18px rgba(160,220,80,0.7), 0 0 36px rgba(120,180,60,0.4), inset 0 0 12px rgba(200,255,100,0.3); }
+      50% { box-shadow: 0 0 28px rgba(160,220,80,0.9), 0 0 52px rgba(120,180,60,0.6), inset 0 0 20px rgba(200,255,100,0.5); }
+    }
+
+    #flute-progress {
+      display: flex;
+      gap: 8px;
+      margin-top: 24px;
+    }
+    .progress-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(150,190,100,0.2);
+      border: 1px solid rgba(150,190,100,0.3);
+      transition: all 0.2s;
+    }
+    .progress-dot.done {
+      background: #a8d870;
+      box-shadow: 0 0 6px rgba(160,220,80,0.5);
+    }
+
+    #flute-complete {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      text-align: center;
+    }
+    #flute-complete.visible { display: flex; }
+    #complete-text {
+      font-family: 'Georgia', serif;
+      font-size: 1.1rem;
+      font-style: italic;
+      color: #c8e8a8;
+      letter-spacing: 0.08em;
+    }
+    #complete-sub {
+      font-family: 'Georgia', serif;
+      font-size: 0.78rem;
+      color: rgba(180,220,140,0.6);
+      font-style: italic;
+    }
+    #flute-dismiss {
+      background: none;
+      border: 1px solid rgba(150,200,100,0.35);
+      color: #a8d870;
+      padding: 10px 32px;
+      border-radius: 24px;
+      cursor: pointer;
+      font-family: 'Georgia', serif;
+      font-size: 0.85rem;
+      margin-top: 8px;
+      transition: background 0.2s;
+    }
+    #flute-dismiss:hover { background: rgba(150,200,100,0.1); }
+
+    #flute-close-btn {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: none;
+      border: none;
+      color: rgba(180,220,140,0.4);
+      font-size: 1.4rem;
+      cursor: pointer;
+      padding: 4px 10px;
+      transition: color 0.2s;
+    }
+    #flute-close-btn:hover { color: rgba(180,220,140,0.8); }
+
+    a-scene {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+
+  <script src="https://cdn.jsdelivr.net/npm/aframe@1.4.2/dist/aframe-master.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+</head>
+<body>
+
+  <!-- Splash screen: guide button ABOVE Let's Begin -->
+  <div id="splash-screen">
+    <button id="guide-btn" aria-label="Caregiver Guide">
+      <img src="guide-btn.png" alt="Caregiver Guide"
+        onerror="this.parentElement.style.cssText='width:min(70vw,300px);margin-bottom:16px;background:rgba(45,80,45,0.4);border:1px solid rgba(150,200,150,0.3);border-radius:12px;padding:14px;color:#a8d8a8;font-family:Georgia,serif;font-size:0.9rem;font-style:italic;letter-spacing:0.05em;text-align:center;cursor:pointer;opacity:0;pointer-events:none'; this.parentElement.innerHTML='Caregiver Guide';" />
+    </button>
+    <button id="start-btn" aria-label="Let's Begin">
+      <img src="let_s-begin.png" alt="Let's Begin" />
+    </button>
+    <div id="loading-indicator">
+      <div class="spinner"></div>
+    </div>
+  </div>
+
+  <!-- Caregiver guide overlay -->
+  <div id="guide-overlay">
+    <div id="guide-box">
+      <h2>Caregiver Guide</h2>
+      <p>Welcome to Mon and the Bāṁshi — an augmented reality picture book about emotions.</p>
+      <div class="step"><span class="step-num">1.</span><span>Open the book to any illustrated page. Hold your phone camera steadily over the page until the animation appears.</span></div>
+      <div class="step"><span class="step-num">2.</span><span>When a flute button appears at the bottom of the screen, tap it to open the bāṁshi melody for that emotion.</span></div>
+      <div class="step"><span class="step-num">3.</span><span>Glowing holes will appear one at a time on the flute. Guide your child to tap each glowing hole in order to play the melody.</span></div>
+      <div class="step"><span class="step-num">4.</span><span>Once the full melody is played, an animation will appear showing what the character is feeling. Take a moment to talk about that emotion together.</span></div>
+      <div class="step"><span class="step-num">5.</span><span>Use the sound button to play gentle forest sounds throughout the experience.</span></div>
+      <p style="margin-top:8px; font-style:italic; font-size:0.8rem; color:rgba(180,220,160,0.5);">Each melody is rooted in Bengali musical tradition and is designed to reflect the emotion of each character.</p>
+      <button id="guide-close">I understand</button>
+    </div>
+  </div>
+
+  <!-- Scan hint -->
+  <div id="scan-hint"><img src="pointcamera.png" alt="Point camera at the book page" /></div>
+
+  <!-- Sound toggle -->
+  <button id="sound-btn" aria-label="Toggle sound">
+    <img id="sound-icon" src="sound-off.png" alt="Sound off" />
+  </button>
+
+  <!-- Flute button -->
+  <button id="flute-btn" aria-label="Play melody">
+    <img src="flute-btn.png" alt="Play flute"
+      onerror="this.style.display='none'; this.parentElement.style.cssText+='background:rgba(45,80,30,0.7);border:1px solid rgba(150,200,80,0.4);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.4rem;'; this.parentElement.textContent='♪';" />
+  </button>
+
+  <!-- Flute overlay -->
+  <div id="flute-overlay">
+    <button id="flute-close-btn" aria-label="Close flute">✕</button>
+    <div id="flute-title">play the melody</div>
+    <div id="flute-emotion"></div>
+    <div id="flute-instruction">tap each glowing hole</div>
+    <div id="flute-playing">
+      <div id="flute-body"></div>
+      <div id="flute-progress"></div>
+    </div>
+    <div id="flute-complete">
+      <div id="complete-text">সুর বাজল — The melody sang</div>
+      <div id="complete-sub">you heard the heart of the forest</div>
+      <button id="flute-dismiss">continue</button>
+    </div>
+  </div>
+
+  <!-- Scan frame -->
+  <div id="scan-frame">
+    <div class="corner corner-tl"></div>
+    <div class="corner corner-tr"></div>
+    <div class="corner corner-bl"></div>
+    <div class="corner corner-br"></div>
+  </div>
+
+  <!-- AR Scene -->
+  <a-scene
+    id="ar-scene"
+    mindar-image="imageTargetSrc: targets.mind; autoStart: false; uiLoading: no; uiScanning: no; uiError: no; filterMinCF: 0.0001; filterBeta: 0.001; warmupTolerance: 3; missTolerance: 20; maxTrack: 1;"
+    color-space="sRGB"
+    renderer="colorManagement: true, physicallyCorrectLights"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false"
+  >
+    <a-assets>
+      <video id="ar-video" src="animation.mp4" preload="auto" playsinline webkit-playsinline loop crossorigin="anonymous"></video>
+      <audio id="ambient-audio" src="ambient.mp3" preload="auto" loop></audio>
+    </a-assets>
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+    <a-entity mindar-image-target="targetIndex: 0">
+      <a-video src="#ar-video" position="0 0 0.001" width="1" height="0.8" rotation="0 0 0"></a-video>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    const splashScreen  = document.getElementById('splash-screen');
+    const startBtn      = document.getElementById('start-btn');
+    const guideBtn      = document.getElementById('guide-btn');
+    const guideOverlay  = document.getElementById('guide-overlay');
+    const guideClose    = document.getElementById('guide-close');
+    const loadingInd    = document.getElementById('loading-indicator');
+    const scanHint      = document.getElementById('scan-hint');
+    const scanFrame     = document.getElementById('scan-frame');
+    const arScene       = document.getElementById('ar-scene');
+    const arVideo       = document.getElementById('ar-video');
+    const ambientAudio  = document.getElementById('ambient-audio');
+    const soundBtn      = document.getElementById('sound-btn');
+    const soundIcon     = document.getElementById('sound-icon');
+    const fluteBtn      = document.getElementById('flute-btn');
+    const fluteOverlay  = document.getElementById('flute-overlay');
+    const fluteBody     = document.getElementById('flute-body');
+    const fluteEmotion  = document.getElementById('flute-emotion');
+    const fluteProgress = document.getElementById('flute-progress');
+    const flutePlaying  = document.getElementById('flute-playing');
+    const fluteComplete = document.getElementById('flute-complete');
+    const fluteDismiss  = document.getElementById('flute-dismiss');
+    const fluteCloseBtn = document.getElementById('flute-close-btn');
+
+    // ── Note frequencies ──────────────────────────────────────────────
+    const NOTE_FREQ = {
+      'Sa':   261.63,
+      'Re':   293.66,
+      'Ga':   329.63,
+      'Ma':   349.23,
+      'Pa':   392.00,
+      'Dha':  440.00,
+      'Ni':   493.88,
+      'Sa2':  523.25,
+      'Ni-':  466.16,
+      'Ga-':  311.13,
+      'Re-':  277.18,
+      'Dha-': 415.30,
+    };
+
+    // ── Five emotion melodies, Bengali raga-based ─────────────────────
+    const ALL_EMOTIONS = {
+      joy: {
+        name: 'Joy',
+        bengali: 'আনন্দ',
+        // Raga Bhupali — bright ascending pentatonic, pure celebration
+        melody:   ['Sa','Re','Ga','Pa','Dha','Sa2','Dha','Pa'],
+        duration: [0.4,  0.4, 0.4, 0.6,  0.4,  0.8,  0.4, 0.6],
+      },
+      sadness: {
+        name: 'Sadness',
+        bengali: 'বিষণ্নতা',
+        // Raga Bhairavi — komal notes, heavy descending, slow pathos
+        melody:   ['Sa','Ni-','Dha-','Pa','Ma','Ga-','Re-','Sa'],
+        duration: [0.6,  0.5,  0.5,  0.7, 0.5,  0.6,  0.7, 1.0],
+      },
+      fear: {
+        name: 'Fear',
+        bengali: 'ভয়',
+        // Raga Jhinjhit — restless, unsettled, circling
+        melody:   ['Sa','Ma','Pa','Ma','Re','Sa','Ni-','Sa'],
+        duration: [0.3, 0.3, 0.4, 0.3, 0.4, 0.3,  0.5, 0.7],
+      },
+      anger: {
+        name: 'Anger',
+        bengali: 'রাগ',
+        // Raga Khamaj — sharp, forceful, strong downward drive
+        melody:   ['Pa','Dha','Ni','Sa2','Ni','Dha','Pa','Ma'],
+        duration: [0.3,  0.3, 0.3,  0.5, 0.3,  0.3, 0.4, 0.6],
+      },
+      longing: {
+        name: 'Longing',
+        bengali: 'আকুলতা',
+        // Bhatiali/Bhimpalasri — aching, open, riverine, deeply Bengali
+        melody:   ['Ma','Ga-','Re','Sa','Ni-','Pa','Ma','Ga-'],
+        duration: [0.6,  0.6, 0.5, 0.8,  0.6, 0.5, 0.7,  1.0],
+      },
+    };
+
+    // ── Web Audio ─────────────────────────────────────────────────────
+    let audioCtx = null;
+    function getAudioCtx() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      return audioCtx;
+    }
+
+    function playNote(noteName, durationSec) {
+      const ctx = getAudioCtx();
+      const freq = NOTE_FREQ[noteName] || 261.63;
+      const now = ctx.currentTime;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now);
+      osc.frequency.setValueAtTime(freq * 1.003, now + durationSec * 0.3);
+      osc.frequency.setValueAtTime(freq, now + durationSec * 0.6);
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(0.28, now + 0.04);
+      gain.gain.setValueAtTime(0.28, now + durationSec * 0.7);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + durationSec);
+
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(freq * 1.006, now);
+      gain2.gain.setValueAtTime(0, now);
+      gain2.gain.linearRampToValueAtTime(0.08, now + 0.04);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + durationSec);
+
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc2.connect(gain2); gain2.connect(ctx.destination);
+      osc.start(now); osc.stop(now + durationSec);
+      osc2.start(now); osc2.stop(now + durationSec);
+    }
+
+    // ── Flute interface ───────────────────────────────────────────────
+    let currentEmotion = null;
+    let currentStep = 0;
+    let holes = [];
+    let dots = [];
+    let isComplete = false;
+
+    function buildFluteUI(emotionKey) {
+      currentEmotion = ALL_EMOTIONS[emotionKey] || ALL_EMOTIONS.joy;
+      currentStep = 0;
+      isComplete = false;
+
+      fluteEmotion.textContent = currentEmotion.name + ' — ' + currentEmotion.bengali;
+
+      fluteBody.innerHTML = '';
+      holes = [];
+      for (let i = 0; i < 6; i++) {
+        const hole = document.createElement('div');
+        hole.className = 'flute-hole';
+        const label = document.createElement('span');
+        label.className = 'note-label';
+        label.textContent = currentEmotion.melody[i] || '';
+        hole.appendChild(label);
+        hole.addEventListener('click', () => onHoleTap(i));
+        hole.addEventListener('touchstart', (e) => { e.preventDefault(); onHoleTap(i); }, { passive: false });
+        fluteBody.appendChild(hole);
+        holes.push(hole);
+      }
+
+      fluteProgress.innerHTML = '';
+      dots = [];
+      for (let i = 0; i < currentEmotion.melody.length; i++) {
+        const dot = document.createElement('div');
+        dot.className = 'progress-dot';
+        fluteProgress.appendChild(dot);
+        dots.push(dot);
+      }
+
+      flutePlaying.style.display = 'flex';
+      flutePlaying.style.flexDirection = 'column';
+      flutePlaying.style.alignItems = 'center';
+      fluteComplete.classList.remove('visible');
+      highlightCurrentHole();
+    }
+
+    function highlightCurrentHole() {
+      holes.forEach(h => h.classList.remove('glowing'));
+      if (currentStep < currentEmotion.melody.length) {
+        holes[currentStep % 6].classList.add('glowing');
+      }
+    }
+
+    function onHoleTap(holeIdx) {
+      if (isComplete) return;
+      const expectedHole = currentStep % 6;
+      if (holeIdx !== expectedHole) {
+        holes[holeIdx].classList.add('wrong');
+        setTimeout(() => holes[holeIdx].classList.remove('wrong'), 400);
+        return;
+      }
+      const noteName = currentEmotion.melody[currentStep];
+      const duration = currentEmotion.duration[currentStep] || 0.5;
+      playNote(noteName, duration);
+      holes[holeIdx].classList.remove('glowing');
+      holes[holeIdx].classList.add('played');
+      dots[currentStep].classList.add('done');
+      currentStep++;
+      if (currentStep >= currentEmotion.melody.length) {
+        setTimeout(() => showComplete(), 500);
+      } else {
+        setTimeout(() => highlightCurrentHole(), 200);
+      }
+    }
+
+    function showComplete() {
+      isComplete = true;
+      holes.forEach(h => h.classList.remove('glowing', 'played'));
+      flutePlaying.style.display = 'none';
+      fluteComplete.classList.add('visible');
+    }
+
+    fluteDismiss.addEventListener('click', () => fluteOverlay.classList.remove('visible'));
+    fluteCloseBtn.addEventListener('click', () => fluteOverlay.classList.remove('visible'));
+    fluteBtn.addEventListener('click', () => {
+      buildFluteUI('joy');
+      fluteOverlay.classList.add('visible');
+    });
+
+    // ── Splash / AR setup ─────────────────────────────────────────────
+    function onReady() {
+      loadingInd.style.display = 'none';
+      startBtn.classList.add('ready');
+      guideBtn.classList.add('ready');
+    }
+
+    arScene.addEventListener('loaded', onReady);
+    setTimeout(() => { if (!startBtn.classList.contains('ready')) onReady(); }, 5000);
+
+    startBtn.addEventListener('click', () => {
+      splashScreen.style.display = 'none';
+      scanHint.style.display     = 'block';
+      scanFrame.style.display    = 'flex';
+      try { arScene.systems['mindar-image-system'].start(); }
+      catch(e) { console.error('AR start error:', e); }
+    });
+
+    guideBtn.addEventListener('click', () => guideOverlay.classList.add('visible'));
+    guideClose.addEventListener('click', () => guideOverlay.classList.remove('visible'));
+
+    let soundEnabled = false;
+    soundBtn.addEventListener('click', () => {
+      soundEnabled = !soundEnabled;
+      if (soundEnabled) {
+        ambientAudio.play().catch(() => {});
+        soundIcon.src = 'sound-on.png';
+        soundIcon.alt = 'Sound on';
+      } else {
+        ambientAudio.pause();
+        soundIcon.src = 'sound-off.png';
+        soundIcon.alt = 'Sound off';
+      }
+    });
+
+    arScene.addEventListener('targetFound', () => {
+      scanHint.style.display  = 'none';
+      scanFrame.style.display = 'none';
+      soundBtn.style.display  = 'block';
+      fluteBtn.style.display  = 'block';
+      arVideo.play().catch(() => {});
+      if (soundEnabled) ambientAudio.play().catch(() => {});
+    });
+
+    arScene.addEventListener('targetLost', () => {
+      scanHint.style.display  = 'block';
+      scanFrame.style.display = 'flex';
+      fluteBtn.style.display  = 'none';
+      arVideo.pause();
+      ambientAudio.pause();
+    });
+  </script>
+</body>
+</html>
