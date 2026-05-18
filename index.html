@@ -437,121 +437,54 @@
       if (fluteOverlay.classList.contains('visible')) positionHoles();
     });
 
-    // ── Bāṁshi flute tone synthesis ───────────────────────────
-    // Tuned to match Indian bamboo flute character:
-    // - breathy air noise at attack (blown embouchure)
-    // - hollow body resonance using overlapping harmonics
-    // - natural pitch drift / subtle vibrato like finger pressure
-    // - airy fade-out like breath running out
+    // ─────────────────────────────────────────────────────────────
+// REAL BĀNSHI-STYLE FLUTE USING YOUR SAMPLE (FULL 4-SECOND NOTE)
+// ─────────────────────────────────────────────────────────────
 
-    // Sa Re Ga Ma Pa Dha — C pentatonic mapped to bāṁshi feel
-    const noteFreqs = [523.25, 587.33, 659.25, 698.46, 783.99, 880.00];
+// Load your flute sample (4 seconds long)
+const fluteSample = new Audio("flute-note.mp3");
+fluteSample.preload = "auto";
 
-    function playTone(holeIndex) {
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const freq = noteFreqs[holeIndex];
-        const now = ctx.currentTime;
-        const duration = 0.9;
+// Pitch ratios for a BRIGHT, HAPPY major pentatonic scale
+// Sa, Re, Ga, Pa, Dha, Ni
+const pitchMap = [
+  1.00,  // Sa (base)
+  1.12,  // Re
+  1.26,  // Ga
+  1.50,  // Pa
+  1.68,  // Dha
+  1.88   // Ni
+];
 
-        const master = ctx.createGain();
-        master.gain.value = 1.0;
-        master.connect(ctx.destination);
+// Play a note using pitch-shifted sample
+function playTone(holeIndex) {
+  try {
+    // Clone the audio so multiple taps can overlap
+    const audio = fluteSample.cloneNode(true);
 
-        // ── 1. Fundamental — sine wave (pure flute core) ──────
-        const fund = ctx.createOscillator();
-        fund.type = 'sine';
-        fund.frequency.value = freq;
-        const fundGain = ctx.createGain();
-        fundGain.gain.setValueAtTime(0, now);
-        fundGain.gain.linearRampToValueAtTime(0.38, now + 0.04);
-        fundGain.gain.setValueAtTime(0.38, now + duration - 0.2);
-        fundGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-        fund.connect(fundGain);
-        fundGain.connect(master);
+    // Apply pitch shift
+    audio.playbackRate = pitchMap[holeIndex];
 
-        // ── 2. Second harmonic — adds bamboo warmth ───────────
-        const harm2 = ctx.createOscillator();
-        harm2.type = 'sine';
-        harm2.frequency.value = freq * 2;
-        const harm2Gain = ctx.createGain();
-        harm2Gain.gain.setValueAtTime(0, now);
-        harm2Gain.gain.linearRampToValueAtTime(0.10, now + 0.05);
-        harm2Gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-        harm2.connect(harm2Gain);
-        harm2Gain.connect(master);
+    // Start at the beginning of the sample
+    audio.currentTime = 0;
 
-        // ── 3. Third harmonic — adds hollow body resonance ────
-        const harm3 = ctx.createOscillator();
-        harm3.type = 'sine';
-        harm3.frequency.value = freq * 3;
-        const harm3Gain = ctx.createGain();
-        harm3Gain.gain.setValueAtTime(0, now);
-        harm3Gain.gain.linearRampToValueAtTime(0.04, now + 0.06);
-        harm3Gain.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.7);
-        harm3.connect(harm3Gain);
-        harm3Gain.connect(master);
+    // Fade-in for natural flute feel
+    audio.volume = 0.0;
 
-        // ── 4. Breath noise — filtered air across embouchure ──
-        // Using a white noise buffer for realistic breath attack
-        const bufferSize = ctx.sampleRate * duration;
-        const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-        const data = noiseBuffer.getChannelData(0);
-        for (let i = 0; i < bufferSize; i++) {
-          data[i] = (Math.random() * 2 - 1);
-        }
-        const noise = ctx.createBufferSource();
-        noise.buffer = noiseBuffer;
+    audio.play().then(() => {
+      // Fade in over ~150ms
+      let v = 0.0;
+      const fadeIn = setInterval(() => {
+        v += 0.06;
+        audio.volume = Math.min(v, 1.0);
+        if (v >= 1.0) clearInterval(fadeIn);
+      }, 20);
+    }).catch(() => {});
 
-        // Bandpass filter centred near the fundamental — gives airy "breath into hole" feel
-        const breathFilter = ctx.createBiquadFilter();
-        breathFilter.type = 'bandpass';
-        breathFilter.frequency.value = freq * 1.2;
-        breathFilter.Q.value = 1.2;
-
-        // High-shelf to add the breathy hiss quality
-        const hissFilter = ctx.createBiquadFilter();
-        hissFilter.type = 'highshelf';
-        hissFilter.frequency.value = freq * 3;
-        hissFilter.gain.value = 6;
-
-        const breathGain = ctx.createGain();
-        // Breath is LOUD at attack, drops quickly — most realistic bāṁshi characteristic
-        breathGain.gain.setValueAtTime(0.18, now);
-        breathGain.gain.linearRampToValueAtTime(0.22, now + 0.03); // small puff at start
-        breathGain.gain.exponentialRampToValueAtTime(0.04, now + 0.12);
-        breathGain.gain.exponentialRampToValueAtTime(0.015, now + 0.35);
-        breathGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-        noise.connect(breathFilter);
-        breathFilter.connect(hissFilter);
-        hissFilter.connect(breathGain);
-        breathGain.connect(master);
-
-        // ── 5. Natural vibrato — slow finger-pressure wobble ──
-        const vibrato = ctx.createOscillator();
-        vibrato.frequency.value = 5.2; // ~5Hz like human finger vibrato
-        const vibratoGain = ctx.createGain();
-        // Vibrato fades IN after the attack settles (realistic)
-        vibratoGain.gain.setValueAtTime(0, now);
-        vibratoGain.gain.linearRampToValueAtTime(0, now + 0.12);
-        vibratoGain.gain.linearRampToValueAtTime(5, now + 0.3);
-        vibratoGain.gain.setValueAtTime(5, now + duration - 0.15);
-        vibratoGain.gain.linearRampToValueAtTime(0, now + duration);
-        vibrato.connect(vibratoGain);
-        vibratoGain.connect(fund.frequency);
-        vibratoGain.connect(harm2.frequency);
-
-        // ── Start & stop all ──────────────────────────────────
-        fund.start(now);      fund.stop(now + duration);
-        harm2.start(now);     harm2.stop(now + duration);
-        harm3.start(now);     harm3.stop(now + duration);
-        noise.start(now);     noise.stop(now + duration);
-        vibrato.start(now);   vibrato.stop(now + duration);
-
-      } catch(e) { console.warn('Audio error:', e); }
-    }
-
+  } catch (e) {
+    console.warn("Flute audio error:", e);
+  }
+}
     // ── Sequence logic ────────────────────────────────────────
     // Joy sequence: holes 1 3 5 3 1 5
     const TARGET_SEQUENCE = [1, 3, 5, 3, 1, 5];
